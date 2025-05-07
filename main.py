@@ -154,7 +154,7 @@ async def main():
     media_group_ids_done = set()
     results = []
 
-    async for msg in client.iter_messages("WatcherGuru", limit=20):
+    async for msg in client.iter_messages("ChatGPTMastermind", limit=20):
         original_text = (msg.text or "").strip()
 
         if not original_text or len(original_text.split()) < 3:
