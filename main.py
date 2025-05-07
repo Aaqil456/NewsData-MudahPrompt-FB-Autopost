@@ -50,7 +50,6 @@ def translate_to_malay(text):
     prompt = f"""
 Translate the following post into Malay.
 Do not include any usernames, mentions, links, or Telegram source references.
-If the original post starts with 'JUST IN:' or '**JUST IN:**', please translate it as 'TERKINI:'.
 Write it as a casual, friendly FB caption in one paragraph — no heading, no explanation.
 Do not use slang or shouting. Keep it natural, chill, and neutral.
 
