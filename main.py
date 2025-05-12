@@ -5,7 +5,6 @@ import re
 import requests
 from datetime import datetime
 
-# === ENV ===
 RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 FB_PAGE_ID = os.getenv("FB_PAGE_ID")
@@ -13,7 +12,6 @@ LONG_LIVED_USER_TOKEN = os.getenv("LONG_LIVED_USER_TOKEN")
 
 RESULT_FILE = "results.json"
 
-# === Load posted tweet IDs ===
 def load_posted_ids():
     try:
         with open(RESULT_FILE, "r", encoding="utf-8") as f:
@@ -21,7 +19,6 @@ def load_posted_ids():
     except:
         return set()
 
-# === Log new posted entries ===
 def log_result(new_entries):
     try:
         with open(RESULT_FILE, "r", encoding="utf-8") as f:
@@ -31,7 +28,6 @@ def log_result(new_entries):
     with open(RESULT_FILE, "w", encoding="utf-8") as f:
         json.dump(existing + new_entries, f, ensure_ascii=False, indent=2)
 
-# === Translate text ===
 def translate_to_malay(text):
     cleaned = re.sub(r'@\w+|https?://\S+|\[.*?\]\(.*?\)', '', text).strip()
     prompt = f"""
@@ -50,7 +46,6 @@ Translate this post into Malay as a casual, friendly FB caption. Avoid slang, up
         print("[Gemini Error]", e)
         return "Translation failed"
 
-# === Facebook Token ===
 def get_fb_token():
     try:
         res = requests.get(f"https://graph.facebook.com/v19.0/me/accounts?access_token={LONG_LIVED_USER_TOKEN}")
@@ -58,7 +53,6 @@ def get_fb_token():
     except:
         return None
 
-# === Post Text to FB ===
 def post_text_only_to_fb(caption):
     token = get_fb_token()
     if not token:
@@ -70,7 +64,6 @@ def post_text_only_to_fb(caption):
     print("[FB] Text posted." if r.status_code == 200 else f"[FB Text Error] {r.status_code}")
     return r.status_code == 200
 
-# === Post Photos to FB ===
 def post_photos_to_fb(image_paths, caption):
     token = get_fb_token()
     if not token:
@@ -97,7 +90,6 @@ def post_photos_to_fb(image_paths, caption):
     )
     return r.status_code == 200
 
-# === Fetch tweets from RapidAPI ===
 def fetch_tweets_rapidapi(username, max_tweets=20):
     url = "https://twttrapi.p.rapidapi.com/user-tweets"
     headers = {
@@ -106,7 +98,7 @@ def fetch_tweets_rapidapi(username, max_tweets=20):
     }
     response = requests.get(url, headers=headers, params={"username": username})
     if response.status_code != 200:
-        print("[API ERROR]", response.text)
+        print("[API ERROR]", response.status_code, response.text)
         return []
 
     data = response.json()
@@ -144,11 +136,10 @@ def fetch_tweets_rapidapi(username, max_tweets=20):
             print("[Tweet Parse Error]", e)
     return tweets
 
-# === Main Execution ===
 def fetch_and_post_tweets():
     posted_ids = load_posted_ids()
     results = []
-    usernames = ["AInewshuborg"]  # <-- tukar senarai username di sini
+    usernames = ["AInewshuborg"]  # boleh tambah lagi jika mahu
 
     for username in usernames:
         tweets = fetch_tweets_rapidapi(username, 20)
@@ -178,7 +169,7 @@ def fetch_and_post_tweets():
             if success:
                 results.append({
                     "id": tweet["id"],
-                    "tweet_url": tweet["tweet_url"],  # ✅ log link, tapi tak post
+                    "tweet_url": tweet["tweet_url"],
                     "original_text": tweet["text"],
                     "translated_caption": tweet["text"],
                     "images": tweet["images"],
