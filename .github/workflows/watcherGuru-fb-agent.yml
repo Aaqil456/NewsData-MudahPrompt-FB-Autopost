@@ -2,60 +2,46 @@ name: WatcherGuru FB Poster
 
 on:
   workflow_dispatch:
-  #schedule:
-     #- cron: "*/10 * * * *"
+  schedule:
+    - cron: "*/30 * * * *"  # setiap 30 minit
 
 permissions:
   contents: write
 
 jobs:
   run:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     steps:
       - name: ⬇️ Checkout Code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: 🐍 Set Up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
-          python-version: 3.11
+          python-version: "3.11"
 
       - name: 📦 Install Dependencies
-        run: pip install -r requirements.txt
-
-      - name: 🔐 Restore Telegram Session
-        env:
-          TELEGRAM_SESSION_B64: ${{ secrets.TELEGRAM_SESSION_B64 }}
-        run: |
-          echo "${TELEGRAM_SESSION_B64}" | base64 -d > telegram_session.session
-          echo "✅ Telegram session restored."
+        run: pip install requests
 
       - name: 🚀 Run WatcherGuru Bot
         env:
-          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
-          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
           LONG_LIVED_USER_TOKEN: ${{ secrets.LONG_LIVED_USER_TOKEN }}
         run: |
           python main.py
-          echo "[DEBUG] Showing results.json (if exists)"
+          echo "[DEBUG] results.json content:"
           cat results.json || echo "⚠️ results.json not found"
 
-      - name: 📤 Commit and Push results.json + posted_id_cache.json
+      - name: 📤 Commit and Push results.json
         env:
           ACTIONS_PAT: ${{ secrets.ACTIONS_PAT }}
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git pull --rebase https://x-access-token:${{ secrets.ACTIONS_PAT }}@github.com/${{ github.repository }}.git main || echo "No changes to rebase"
+          git pull --rebase "https://x-access-token:${{ secrets.ACTIONS_PAT }}@github.com/${{ github.repository }}.git" main || true
           git add results.json
-          git diff --cached --quiet || git commit -m "🧠 Update results and posted_id_cache from WatcherGuru Bot"
-          git push https://x-access-token:${{ secrets.ACTIONS_PAT }}@github.com/${{ github.repository }}.git main || echo "✅ Nothing to push"
-
-      - name: 🧹 Cleanup Telegram Session
-        run: |
-          rm -f telegram_session.session
-          echo "🧽 Session file deleted"
+          git diff --cached --quiet || git commit -m "🔄 Update results.json"
+          git push "https://x-access-token:${{ secrets.ACTIONS_PAT }}@github.com/${{ github.repository }}.git" main || echo "✅ Nothing to push"
