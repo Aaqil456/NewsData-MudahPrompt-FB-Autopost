@@ -107,7 +107,7 @@ def post_video_to_fb(video_path, caption):
     return r.status_code == 200
 
 # === Fetch Tweets
-def fetch_tweets_rapidapi(username, max_tweets=20):
+def fetch_tweets_rapidapi(username, max_tweets=30):
     url = "https://twttrapi.p.rapidapi.com/user-tweets"
     headers = {
         "x-rapidapi-key": RAPIDAPI_KEY,
