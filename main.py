@@ -29,11 +29,11 @@ def log_result(new_entries):
         json.dump(existing + new_entries, f, ensure_ascii=False, indent=2)
 
 def translate_to_malay(text):
-    cleaned = re.sub(r'@\w+|https?://\S+|\[.*?\]\(.*?\)', '', text).strip()
+    #cleaned = re.sub(r'@\w+|https?://\S+|\[.*?\]\(.*?\)', '', text).strip()
     prompt = f"""
 Translate this post into Malay as a casual, friendly FB caption. Avoid slang, uppercase, and do not explain. Make it natural and structured for easy reading.
 
-'{cleaned}'
+'{text}'
 """
     try:
         res = requests.post(
