@@ -178,7 +178,7 @@ def fetch_tweets_rapidapi(username, max_tweets=30):
 def fetch_and_post_tweets():
     posted_ids = load_posted_ids()
     results = []
-    usernames = ["AInewshuborg","prompthero"]
+    usernames = ["AInewshuborg","prompthero","AIToolsCorner"]
 
     for username in usernames:
         tweets = fetch_tweets_rapidapi(username, 20)
