@@ -1,4 +1,4 @@
-name: WatcherGuru FB Poster
+name: SenangPrompt FB Poster
 
 on:
   workflow_dispatch:
