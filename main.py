@@ -110,40 +110,48 @@ def fetch_tweets_rapidapi(username, max_tweets=20):
         response = requests.get(url, headers=headers, params={"username": username})
         print("[DEBUG] Twitter API status:", response.status_code)
         if response.status_code != 200:
-            print("[API ERROR]", response.text[:200])
+            print("[API ERROR]", response.text[:300])
             return []
 
         data = response.json()
         timeline = data.get("user_result", {}).get("result", {}).get("timeline_response", {}).get("timeline", {})
         instructions = timeline.get("instructions", [])
         if not instructions:
-            print("[DEBUG] No instructions in timeline")
+            print("[DEBUG] No instructions found.")
             return []
 
         entries = []
+
         for ins in instructions:
             if ins.get("__typename") == "TimelineAddEntries":
-                entries = ins.get("entries", [])
-                break
+                entries.extend(ins.get("entries", []))
+            elif ins.get("__typename") == "TimelinePinEntry":
+                pinned_entry = ins.get("entry")
+                if pinned_entry:
+                    entries.append(pinned_entry)
 
         if not entries:
-            print("[DEBUG] No entries found for username:", username)
+            print("[DEBUG] No tweet entries found.")
             return []
 
         tweets = []
+
         for entry in entries:
             try:
                 tweet = entry["content"]["content"]["tweetResult"]["result"]
                 tid = tweet.get("rest_id", "")
                 legacy = tweet.get("legacy", {})
+
                 text = tweet.get("note_tweet", {}).get("note_tweet_results", {}).get("result", {}).get("text") or \
                        legacy.get("full_text") or legacy.get("text", "")
                 if not text or not tid:
                     continue
+
                 media_urls = []
                 for m in legacy.get("extended_entities", {}).get("media", []) + legacy.get("entities", {}).get("media", []):
                     if m.get("type") == "photo":
                         media_urls.append(m.get("media_url_https") or m.get("media_url"))
+
                 translated = translate_to_malay(text)
                 if translated and translated != "Translation failed":
                     tweets.append({
@@ -152,14 +160,20 @@ def fetch_tweets_rapidapi(username, max_tweets=20):
                         "images": media_urls,
                         "tweet_url": f"https://x.com/{username}/status/{tid}"
                     })
+
                 if len(tweets) >= max_tweets:
                     break
+
             except Exception as e:
                 print("[Tweet Parse Error]", e)
+                continue
+
         return tweets
+
     except Exception as e:
         print("[Twitter API Error]", e)
         return []
+
 
 # === MAIN ===
 def fetch_and_post_tweets():
