@@ -13,11 +13,11 @@ LONG_LIVED_USER_TOKEN = os.getenv("LONG_LIVED_USER_TOKEN")
 
 RESULT_FILE = "results.json"
 
-# === Load posted texts ===
-def load_posted_texts_from_results():
+# === Load posted tweet IDs ===
+def load_posted_ids():
     try:
         with open(RESULT_FILE, "r", encoding="utf-8") as f:
-            return set(entry["original_text"].strip() for entry in json.load(f) if entry.get("original_text"))
+            return set(entry["id"] for entry in json.load(f) if entry.get("id"))
     except:
         return set()
 
@@ -31,11 +31,11 @@ def log_result(new_entries):
     with open(RESULT_FILE, "w", encoding="utf-8") as f:
         json.dump(existing + new_entries, f, ensure_ascii=False, indent=2)
 
-# === Translate ===
+# === Translate text ===
 def translate_to_malay(text):
     cleaned = re.sub(r'@\w+|https?://\S+|\[.*?\]\(.*?\)', '', text).strip()
     prompt = f"""
-Translate this post into Malay as a casual, friendly FB caption also make the structure easy to read. Avoid slang, uppercase, and do not explain.
+Translate this post into Malay as a casual, friendly FB caption. Avoid slang, uppercase, and do not explain. Make it natural and structured for easy reading.
 
 '{cleaned}'
 """
@@ -50,7 +50,7 @@ Translate this post into Malay as a casual, friendly FB caption also make the st
         print("[Gemini Error]", e)
         return "Translation failed"
 
-# === Facebook posting ===
+# === Facebook Token ===
 def get_fb_token():
     try:
         res = requests.get(f"https://graph.facebook.com/v19.0/me/accounts?access_token={LONG_LIVED_USER_TOKEN}")
@@ -58,6 +58,7 @@ def get_fb_token():
     except:
         return None
 
+# === Post Text to FB ===
 def post_text_only_to_fb(caption):
     token = get_fb_token()
     if not token:
@@ -69,6 +70,7 @@ def post_text_only_to_fb(caption):
     print("[FB] Text posted." if r.status_code == 200 else f"[FB Text Error] {r.status_code}")
     return r.status_code == 200
 
+# === Post Photos to FB ===
 def post_photos_to_fb(image_paths, caption):
     token = get_fb_token()
     if not token:
@@ -142,46 +144,52 @@ def fetch_tweets_rapidapi(username, max_tweets=20):
             print("[Tweet Parse Error]", e)
     return tweets
 
-# === Main function ===
+# === Main Execution ===
 def fetch_and_post_tweets():
-    posted = load_posted_texts_from_results()
+    posted_ids = load_posted_ids()
     results = []
-    tweets = fetch_tweets_rapidapi("WatcherGuru", 20)  # Tukar username jika perlu
+    usernames = ["WatcherGuru"]  # <-- tukar senarai username di sini
 
-    for i, tweet in enumerate(tweets):
-        if tweet["text"] in posted:
-            print(f"[SKIP] Already posted: {tweet['text'][:60]}")
-            continue
+    for username in usernames:
+        tweets = fetch_tweets_rapidapi(username, 20)
 
-        success = False
-        if tweet["images"]:
-            img_paths = []
-            for j, url in enumerate(tweet["images"]):
-                try:
-                    path = f"temp_{i}_{j}.jpg"
-                    with open(path, "wb") as f:
-                        f.write(requests.get(url).content)
-                    img_paths.append(path)
-                except Exception as e:
-                    print("[Image DL Error]", e)
-            success = post_photos_to_fb(img_paths, tweet["text"])
-            for p in img_paths:
-                if os.path.exists(p): os.remove(p)
-        else:
-            success = post_text_only_to_fb(tweet["text"])
+        for i, tweet in enumerate(tweets):
+            if tweet["id"] in posted_ids:
+                print(f"[SKIP] Already posted: {tweet['tweet_url']}")
+                continue
 
-        if success:
-            results.append({
-                "tweet_url": tweet["tweet_url"],
-                "original_text": tweet["text"],
-                "translated_caption": tweet["text"],
-                "fb_status": "Posted",
-                "date_posted": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            })
+            success = False
+            if tweet["images"]:
+                img_paths = []
+                for j, url in enumerate(tweet["images"]):
+                    try:
+                        path = f"temp_{tweet['id']}_{j}.jpg"
+                        with open(path, "wb") as f:
+                            f.write(requests.get(url).content)
+                        img_paths.append(path)
+                    except Exception as e:
+                        print("[Image DL Error]", e)
+                success = post_photos_to_fb(img_paths, tweet["text"])
+                for p in img_paths:
+                    if os.path.exists(p): os.remove(p)
+            else:
+                success = post_text_only_to_fb(tweet["text"])
 
-        time.sleep(1)
+            if success:
+                results.append({
+                    "id": tweet["id"],
+                    "tweet_url": tweet["tweet_url"],  # ✅ log link, tapi tak post
+                    "original_text": tweet["text"],
+                    "translated_caption": tweet["text"],
+                    "images": tweet["images"],
+                    "fb_status": "Posted",
+                    "date_posted": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                })
 
-    log_result(results)
+            time.sleep(1)
+
+    if results:
+        log_result(results)
 
 if __name__ == "__main__":
     fetch_and_post_tweets()
