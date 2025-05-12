@@ -114,6 +114,9 @@ def fetch_tweets_rapidapi(username, max_tweets=20):
             return []
 
         data = response.json()
+        print("[DEBUG] Full response keys:", list(data.keys()))
+        print("[DEBUG] user_result:", json.dumps(data.get("user_result", {}), indent=2)[:1000])
+
         timeline = data.get("user_result", {}).get("result", {}).get("timeline_response", {}).get("timeline", {})
         instructions = timeline.get("instructions", [])
         if not instructions:
