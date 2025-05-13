@@ -34,7 +34,9 @@ def log_result(new_entries):
 def translate_to_malay(text):
     cleaned = re.sub(r'@\w+|https?://\S+', '', text).strip()
     prompt = f"""
-Translate this post into Malay as a casual, friendly FB caption. Avoid slang, uppercase, and do not explain. Make it natural and structured for easy reading.
+Translate this post into Malay as a casual, 
+friendly FB caption. Avoid slang, uppercase, and do not explain. Make it natural and structured for easy reading.
+Do not use slang or shouting. Keep it natural, chill, and neutral
 
 '{cleaned}'
 """
