@@ -36,6 +36,7 @@ def translate_to_malay(text):
     prompt = f"""
 Translate this post into Malay as a casual, 
 friendly FB caption. Avoid slang, uppercase, and do not explain. Make it natural and structured for easy reading.
+if the post seems like a advertisment then just return a random info about prompt engineering in malay
 Do not use slang or shouting. Keep it natural, chill, and neutral
 
 '{cleaned}'
