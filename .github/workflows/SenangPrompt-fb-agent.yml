@@ -2,8 +2,8 @@ name: SenangPrompt FB Poster
 
 on:
   workflow_dispatch:
-  #schedule:
-    #- cron: "*/30 * * * *"  # setiap 30 minit
+  schedule:
+    - cron: "*/30 * * * *"  # setiap 30 minit
 
 permissions:
   contents: write
