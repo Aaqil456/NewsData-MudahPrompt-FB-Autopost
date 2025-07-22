@@ -39,7 +39,7 @@ Translate the following post into Malay as a casual, friendly Facebook caption.
 Use proper, natural language without slang, emojis, or all caps.
 Format the caption with clear and readable spacing.
 Do not explain anything or include any introduction—return only the translated caption.
-If the post is clearly an advertisement, do not translate. Instead, return a short fun fact about prompt engineering in Malay.
+If the post is clearly an advertisement in which it have things like link in bio then, do not translate. Instead, return a short fun fact about prompt engineering in Malay.
 
 '{cleaned}'
 """
@@ -183,7 +183,7 @@ def fetch_tweets_rapidapi(username, max_tweets=30):
 def fetch_and_post_tweets():
     posted_ids = load_posted_ids()
     results = []
-    usernames = ["prompthero"]
+    usernames = ["prompthero","GptPromptsTips", "Prompt__ChatGPT"]
 
     for username in usernames:
         tweets = fetch_tweets_rapidapi(username, 20)
