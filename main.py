@@ -115,11 +115,13 @@ class GeminiTranslator:
 
         cleaned = self._clean_text(description)
         prompt = (
-            "Translate the following news description into Malay as a casual, friendly Facebook caption.\n"
-            "Use proper, natural language without heavy slang, emojis, or ALL CAPS.\n"
-            "Space the lines clearly. Return ONLY the caption (no intro/explanation).\n"
-            "If the text is obviously an advertisement (e.g., 'link in bio', coupon codes, giveaways),\n"
-            "do NOT translate it. Instead, return ONE short, interesting fun fact about prompt engineering in Malay.\n\n"
+           "Rephrase and translate the following news description into Malay as a casual, friendly Facebook caption.\n"
+           "Write it in third-person (do not use 'saya', 'kami', or personal memory style).\n"
+           "Keep it simple, neutral, and easy to read, as if summarizing news for an aggregator page.\n"
+           "Use proper Malay without heavy slang, emojis, or ALL CAPS.\n"
+           "Space the lines clearly. Return ONLY the caption (no intro, explanation, or extra notes).\n"
+           "If the text is obviously an advertisement (e.g., 'link in bio', coupon codes, giveaways),\n"
+           "do NOT translate it. Instead, return ONE short, interesting fun fact about prompt engineering in Malay.\n\n"
             f"'{cleaned}'"
         )
 
