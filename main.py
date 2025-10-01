@@ -19,7 +19,7 @@ LONG_LIVED_USER_TOKEN = os.getenv("LONG_LIVED_USER_TOKEN")
 
 RESULT_FILE = "results.json"
 MAX_ITEMS = 10
-FIXED_QUERY = "Automation with AI"
+FIXED_QUERY = "Artificial Intelligence"
 
 # Simple default headers (helps avoid 403 on some CDNs)
 HTTP_HEADERS = {
