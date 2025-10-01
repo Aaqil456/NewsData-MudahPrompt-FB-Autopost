@@ -12,17 +12,18 @@ from google.genai import types
 # =========================
 # ENV
 # =========================
-RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-FB_PAGE_ID = os.getenv("FB_PAGE_ID")
-LONG_LIVED_USER_TOKEN = os.getenv("LONG_LIVED_USER_TOKEN")
+NEWSDATA_API_KEY = os.getenv("NEWSDATA_API_KEY")  # required
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")      # required
+FB_PAGE_ID = os.getenv("FB_PAGE_ID")              # required
+LONG_LIVED_USER_TOKEN = os.getenv("LONG_LIVED_USER_TOKEN")  # required
+
 RESULT_FILE = "results.json"
 
 # =========================
 # Helpers: results.json
 # =========================
 def load_posted_ids():
-    """Return a set of tweet IDs already logged as posted."""
+    """Return a set of IDs already logged (we'll use article link as the ID)."""
     try:
         with open(RESULT_FILE, "r", encoding="utf-8") as f:
             return set(entry["id"] for entry in json.load(f) if entry.get("id"))
@@ -48,35 +49,32 @@ class GeminiTranslator:
             raise RuntimeError("GEMINI_API_KEY is missing.")
         self.client = genai.Client(api_key=api_key)
         self.model = model
-        # Disable "thinking" to avoid extra costs/latency
         self.config = types.GenerateContentConfig(
             thinking_config=types.ThinkingConfig(thinking_budget=0)
         )
 
     @staticmethod
     def _clean_text(text: str) -> str:
-        # strip @mentions, URLs, and reduce whitespace
+        # Strip @mentions, URLs, reduce whitespace
         text = re.sub(r'@\w+|https?://\S+|http?://\S+', '', text)
         text = re.sub(r'\s+', ' ', text).strip()
         return text
 
     def translate_to_malay(self, text: str, retries: int = 3, backoff: float = 1.5) -> str:
         """
-        Translate post to Malay casual FB caption using the new SDK.
-        If the content looks like an ad (e.g., 'link in bio'), ask the model to output a short fun fact instead.
+        Translate the content into Malay (casual FB caption).
+        If obviously an ad, return a short Malay fun fact about prompt engineering.
         """
         if not text or not isinstance(text, str) or not text.strip():
             return ""
 
         cleaned = self._clean_text(text)
-
         prompt = (
-            "Translate the following post into Malay as a casual, friendly Facebook caption.\n"
+            "Translate the following news snippet into Malay as a casual, friendly Facebook caption.\n"
             "Use proper, natural language without heavy slang, emojis, or ALL CAPS.\n"
-            "Format the caption with clear readable spacing.\n"
-            "Do not add any intro or explanation—return only the caption.\n"
-            "If the post is clearly an advertisement (e.g., 'link in bio', 'shop now', coupon codes, giveaways, etc.),\n"
-            "then DO NOT translate it. Instead, return ONE short, interesting fun fact about prompt engineering in Malay.\n\n"
+            "Space the lines clearly. Return ONLY the caption (no intro/explanation).\n"
+            "If the text is obviously an advertisement (e.g., 'link in bio', coupon codes, giveaways),\n"
+            "do NOT translate it. Instead, return ONE short, interesting fun fact about prompt engineering in Malay.\n\n"
             f"'{cleaned}'"
         )
 
@@ -88,7 +86,6 @@ class GeminiTranslator:
                     contents=prompt,
                     config=self.config,
                 )
-                # SDK returns a rich object; .text gives the best-effort text aggregate
                 out = (resp.text or "").strip()
                 if out:
                     return out
@@ -168,122 +165,77 @@ def post_photos_to_fb(image_paths, caption) -> bool:
         print("[FB Photo Publish Error]", r.text[:300])
     return r.status_code == 200
 
-def post_video_to_fb(video_path, caption) -> bool:
-    token = get_fb_token()
-    if not token or not os.path.exists(video_path):
-        return False
-    with open(video_path, "rb") as f:
-        r = requests.post(
-            f"https://graph.facebook.com/{FB_PAGE_ID}/videos",
-            data={"description": caption, "access_token": token},
-            files={"source": f},
-            timeout=600
-        )
-    if r.status_code != 200:
-        print("[FB Video Post Error]", r.text[:300])
-    return r.status_code == 200
+# =========================
+# NewsData.io fetcher (fixed query, no language, max_items=10)
+# =========================
+def fetch_news_newsdata(max_items: int = 10):
+    """
+    Fetch news from NewsData.io /api/1/latest with fixed query "AI Automation".
+    Returns list of dicts:
+    {
+      "id": link,                 # used for dedupe
+      "raw_text": combined_text,  # title + description/content
+      "images": [image_url] or [],
+      "article_url": link
+    }
+    """
+    if not NEWSDATA_API_KEY:
+        raise RuntimeError("NEWSDATA_API_KEY is missing.")
 
-# =========================
-# Twitter via RapidAPI
-# =========================
-def fetch_tweets_rapidapi(username, max_tweets=30):
-    """
-    Fetch original tweets (not replies/retweets) using twttrapi RapidAPI.
-    Extract text, images, and best MP4 video URL when present.
-    """
-    url = "https://twttrapi.p.rapidapi.com/user-tweets"
-    headers = {
-        "x-rapidapi-key": RAPIDAPI_KEY,
-        "x-rapidapi-host": "twttrapi.p.rapidapi.com"
+    url = "https://newsdata.io/api/1/latest"
+    params = {
+        "apikey": NEWSDATA_API_KEY,
+        "q": "AI Automation"   # fixed query per requirement
     }
     try:
-        response = requests.get(url, headers=headers, params={"username": username}, timeout=60)
-        if response.status_code != 200:
-            print("[API ERROR]", response.text[:300])
+        r = requests.get(url, params=params, timeout=60)
+        if r.status_code != 200:
+            print("[NewsData ERROR]", r.text[:400])
             return []
 
-        data = response.json()
+        payload = r.json()
+        results = payload.get("results", []) or []
 
-        # Handle both possible nestings defensively
-        timeline = (
-            data.get("data", {}).get("user_result", {}).get("result", {})
-            .get("timeline_response", {}).get("timeline", {})
-        ) or (
-            data.get("user_result", {}).get("result", {})
-            .get("timeline_response", {}).get("timeline", {})
-        )
+        items = []
+        for res in results:
+            link = res.get("link")
+            title = res.get("title") or ""
+            description = res.get("description") or ""
+            content = res.get("content") or ""
+            image_url = res.get("image_url")
 
-        instructions = timeline.get("instructions", [])
-        entries = []
-        for ins in instructions:
-            t = ins.get("__typename")
-            if t == "TimelineAddEntries":
-                entries.extend(ins.get("entries", []))
-            elif t == "TimelinePinEntry":
-                pinned_entry = ins.get("entry")
-                if pinned_entry:
-                    entries.append(pinned_entry)
+            if not link or not (title or description or content):
+                continue
 
-        tweets = []
-        for entry in entries:
-            try:
-                result = entry["content"]["content"]["tweetResult"]["result"]
-                tid = result.get("rest_id", "")
-                legacy = result.get("legacy", {}) or {}
-                if not tid:
-                    continue
+            # Choose best summary text: title + description (fallback content)
+            text_parts = [title.strip()]
+            if description and description.strip() and description.strip().lower() != "null":
+                text_parts.append(description.strip())
+            elif content and content.strip() and content.strip().lower() != "null":
+                text_parts.append(content.strip())
 
-                # Prefer full Note Tweet text if available, otherwise legacy text
-                note = result.get("note_tweet", {}).get("note_tweet_results", {}).get("result", {})
-                text = note.get("text") or legacy.get("full_text") or legacy.get("text", "")
-                if not text:
-                    continue
+            combined = "\n\n".join([p for p in text_parts if p])
 
-                # Skip retweets/replies if needed (optional safety)
-                if legacy.get("retweeted_status_id_str") or legacy.get("in_reply_to_status_id_str"):
-                    continue
+            items.append({
+                "id": link,  # use link as unique ID
+                "raw_text": combined,
+                "images": [image_url] if image_url else [],
+                "article_url": link
+            })
 
-                images, video_url = [], None
-                media_blocks = []
-                media_blocks += legacy.get("extended_entities", {}).get("media", []) or []
-                media_blocks += legacy.get("entities", {}).get("media", []) or []
-                for m in media_blocks:
-                    mtype = m.get("type")
-                    if mtype == "photo":
-                        images.append(m.get("media_url_https") or m.get("media_url"))
-                    elif mtype in ("video", "animated_gif"):
-                        variants = m.get("video_info", {}).get("variants", [])
-                        mp4s = [v for v in variants if v.get("content_type") == "video/mp4"]
-                        best = sorted(mp4s, key=lambda x: x.get("bitrate", 0), reverse=True)
-                        if best:
-                            video_url = best[0].get("url")
+            if len(items) >= max_items:
+                break
 
-                tweets.append({
-                    "id": tid,
-                    "raw_text": text,  # keep original (for logging)
-                    "images": images,
-                    "video": video_url,
-                    "tweet_url": f"https://x.com/{username}/status/{tid}"
-                })
-
-                if len(tweets) >= max_tweets:
-                    break
-
-            except Exception as e:
-                print("[Tweet Parse Error]", e)
-
-        return tweets
+        return items
 
     except Exception as e:
-        print("[Twitter API Error]", e)
+        print("[NewsData Fetch Error]", e)
         return []
 
 # =========================
 # Main Flow
 # =========================
-def fetch_and_post_tweets():
-    if not RAPIDAPI_KEY:
-        raise RuntimeError("RAPIDAPI_KEY is missing.")
+def fetch_and_post_news():
     if not FB_PAGE_ID:
         raise RuntimeError("FB_PAGE_ID is missing.")
     if not LONG_LIVED_USER_TOKEN:
@@ -293,91 +245,73 @@ def fetch_and_post_tweets():
 
     posted_ids = load_posted_ids()
     results = []
-    usernames = ["prompthero"]  # add more if you want
-
     session = requests.Session()  # reuse TCP connections
-    for username in usernames:
-        tweets = fetch_tweets_rapidapi(username, max_tweets=20)
-        print(f"[INFO] Total fetched for @{username}: {len(tweets)}")
 
-        for tweet in tweets:
-            if tweet["id"] in posted_ids:
-                print(f"[SKIP] Already posted: {tweet['tweet_url']}")
-                continue
+    # Fetch from NewsData.io (fixed query, max 10)
+    articles = fetch_news_newsdata(max_items=10)
+    print(f"[INFO] Total fetched from NewsData.io: {len(articles)}")
 
-            # Translate
-            translated = translator.translate_to_malay(tweet["raw_text"])
-            if not translated or translated == "Translation failed":
-                print(f"[SKIP] Translation failed for {tweet['tweet_url']}")
-                continue
+    for art in articles:
+        if art["id"] in posted_ids:
+            print(f"[SKIP] Already posted: {art['article_url']}")
+            continue
 
-            success = False
-            video_path = None
-            img_paths = []
+        # Translate
+        translated = translator.translate_to_malay(art["raw_text"])
+        if not translated or translated == "Translation failed":
+            print(f"[SKIP] Translation failed for {art['article_url']}")
+            continue
 
-            try:
-                if tweet.get("video"):
-                    # Download video
-                    video_path = f"temp_{tweet['id']}.mp4"
-                    with session.get(tweet["video"], timeout=120) as r:
-                        r.raise_for_status()
-                        with open(video_path, "wb") as f:
-                            f.write(r.content)
-                    success = post_video_to_fb(video_path, translated)
+        # Decide posting mode
+        success = False
+        img_paths = []
+        try:
+            if art["images"]:
+                # Download image(s) (NewsData usually provides one)
+                for j, url in enumerate(art["images"]):
+                    if not url:
+                        continue
+                    try:
+                        path = f"temp_news_{int(time.time())}_{j}.jpg"
+                        with session.get(url, timeout=60) as r:
+                            r.raise_for_status()
+                            with open(path, "wb") as f:
+                                f.write(r.content)
+                        img_paths.append(path)
+                    except Exception as e:
+                        print("[Image DL Error]", e)
 
-                elif tweet["images"]:
-                    # Download images
-                    for j, url in enumerate(tweet["images"]):
-                        try:
-                            path = f"temp_{tweet['id']}_{j}.jpg"
-                            with session.get(url, timeout=60) as r:
-                                r.raise_for_status()
-                                with open(path, "wb") as f:
-                                    f.write(r.content)
-                            img_paths.append(path)
-                        except Exception as e:
-                            print("[Image DL Error]", e)
-
-                    if img_paths:
-                        success = post_photos_to_fb(img_paths, translated)
-                    else:
-                        # fallback to text-only if media download failed
-                        success = post_text_only_to_fb(translated)
-
+                if img_paths:
+                    success = post_photos_to_fb(img_paths, translated)
                 else:
                     success = post_text_only_to_fb(translated)
+            else:
+                success = post_text_only_to_fb(translated)
 
-                if success:
-                    results.append({
-                        "id": tweet["id"],
-                        "tweet_url": tweet["tweet_url"],
-                        "original_text": tweet["raw_text"],
-                        "translated_caption": translated,
-                        "images": tweet["images"],
-                        "video": tweet["video"],
-                        "fb_status": "Posted",
-                        "date_posted": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    })
-                    print(f"[✅ POSTED] {tweet['tweet_url']}")
-                else:
-                    print(f"[❌ FAILED] {tweet['tweet_url']}")
+            if success:
+                results.append({
+                    "id": art["id"],  # link
+                    "article_url": art["article_url"],
+                    "original_text": art["raw_text"],
+                    "translated_caption": translated,
+                    "images": art["images"],
+                    "video": None,
+                    "fb_status": "Posted",
+                    "date_posted": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                })
+                print(f"[✅ POSTED] {art['article_url']}")
+            else:
+                print(f"[❌ FAILED] {art['article_url']}")
 
-            finally:
-                # cleanup temp files
-                if video_path and os.path.exists(video_path):
+        finally:
+            for p in img_paths:
+                if os.path.exists(p):
                     try:
-                        os.remove(video_path)
+                        os.remove(p)
                     except Exception:
                         pass
-                for p in img_paths:
-                    if os.path.exists(p):
-                        try:
-                            os.remove(p)
-                        except Exception:
-                            pass
 
-            # be nice to APIs
-            time.sleep(1)
+        time.sleep(1)
 
     if results:
         log_result(results)
@@ -386,4 +320,4 @@ def fetch_and_post_tweets():
         print("[⚠️ NOTHING TO POST]")
 
 if __name__ == "__main__":
-    fetch_and_post_tweets()
+    fetch_and_post_news()
