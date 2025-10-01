@@ -1,2 +1,4 @@
 telethon==1.28.5
-requests
+requests==2.32.3
+google-genai>=1.0.0
+
