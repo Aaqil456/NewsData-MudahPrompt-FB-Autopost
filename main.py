@@ -89,7 +89,7 @@ def _strip_presswire_boilerplate(s: str) -> str:
 # Gemini Translator (new SDK)
 # =========================
 class GeminiTranslator:
-    def __init__(self, api_key: str, model: str = "gemini-2.5-flash"):
+    def __init__(self, api_key: str, model: str = "gemini-2.0-flash"):
         if not api_key:
             raise RuntimeError("GEMINI_API_KEY is missing.")
         self.client = genai.Client(api_key=api_key)
