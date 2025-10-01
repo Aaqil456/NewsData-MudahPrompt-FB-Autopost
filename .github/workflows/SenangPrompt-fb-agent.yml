@@ -2,8 +2,8 @@ name: SenangPrompt FB Poster
 
 on:
   workflow_dispatch:
-  #schedule:
-    #- cron: "*/30 * * * *"  # setiap 30 minit
+  # schedule:
+  #   - cron: "*/30 * * * *"  # run every 30 minutes (uncomment to enable)
 
 permissions:
   contents: write
@@ -14,34 +14,37 @@ jobs:
 
     steps:
       - name: ⬇️ Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: 🐍 Set Up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: 📦 Install Dependencies
-        run: pip install requests
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests google-genai
 
-      - name: 🚀 Run WatcherGuru Bot
+      - name: 🚀 Run NewsData → Gemini → Facebook
         env:
+          NEWSDATA_API_KEY: ${{ secrets.NEWSDATA_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
           LONG_LIVED_USER_TOKEN: ${{ secrets.LONG_LIVED_USER_TOKEN }}
         run: |
           python main.py
           echo "[DEBUG] results.json content:"
-          cat results.json || echo "⚠️ results.json not found"
+          (test -f results.json && cat results.json) || echo "⚠️ results.json not found"
 
       - name: 📤 Commit and Push results.json
+        if: always()
         env:
           ACTIONS_PAT: ${{ secrets.ACTIONS_PAT }}
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git pull --rebase "https://x-access-token:${{ secrets.ACTIONS_PAT }}@github.com/${{ github.repository }}.git" main || true
-          git add results.json
+          git add results.json || true
           git diff --cached --quiet || git commit -m "🔄 Update results.json"
           git push "https://x-access-token:${{ secrets.ACTIONS_PAT }}@github.com/${{ github.repository }}.git" main || echo "✅ Nothing to push"
